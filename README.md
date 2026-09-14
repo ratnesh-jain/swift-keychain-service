@@ -1,6 +1,6 @@
 # swift-keychain-service
 
-A modern, type-safe Swift library that integrates [`KeychainSwift`](https://github.com/evgenyneu/keychain-swift) with Point-Free's [`swift-dependencies`](https://github.com/pointfreeco/swift-dependencies) and [`swift-sharing`](https://github.com/pointfreeco/swift-sharing) libraries.
+A modern, type-safe Swift wrapper library that makes using [`KeychainSwift`](https://github.com/evgenyneu/keychain-swift) easier with Point-Free's [`swift-dependencies`](https://github.com/pointfreeco/swift-dependencies) and [`swift-sharing`](https://github.com/pointfreeco/swift-sharing) libraries patterns in isolated, testable and reviewable way.
 
 Persist sensitive credentials, authentication tokens, and custom `Codable` models securely in the Apple Keychain with property wrappers or dependency injection—complete with automatic observation, thread-safe testing/previews, and customizable JSON serialization options.
 
