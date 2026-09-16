@@ -5,11 +5,23 @@
 //  Created by Ratnesh Jain on 14/09/26.
 //
 
+import ConcurrencyExtras
 import Dependencies
 import DependenciesMacros
 import Foundation
 @preconcurrency import KeychainSwift
-import Synchronization
+
+private enum DefaultKeychainJSONDecoderKey: DependencyKey {
+    static var liveValue: JSONDecoder { JSONDecoder() }
+    static var previewValue: JSONDecoder { JSONDecoder() }
+    static var testValue: JSONDecoder { JSONDecoder() }
+}
+
+private enum DefaultKeychainJSONEncoderKey: DependencyKey {
+    static var liveValue: JSONEncoder { JSONEncoder() }
+    static var previewValue: JSONEncoder { JSONEncoder() }
+    static var testValue: JSONEncoder { JSONEncoder() }
+}
 
 extension DependencyValues {
     /// The default JSON decoder used for decoding Keychain values.
@@ -28,11 +40,10 @@ extension DependencyValues {
     ///     // Decodes values with custom configuration
     /// }
     /// ```
-    @DependencyEntry(
-        liveValue: JSONDecoder(),
-        previewValue: JSONDecoder()
-    )
-    public var defaultKeychainJSONDecoder: JSONDecoder
+    public var defaultKeychainJSONDecoder: JSONDecoder {
+        get { self[DefaultKeychainJSONDecoderKey.self] }
+        set { self[DefaultKeychainJSONDecoderKey.self] = newValue }
+    }
     
     /// The default JSON encoder used for encoding Keychain values.
     ///
@@ -40,7 +51,7 @@ extension DependencyValues {
     /// or other JSON encoding configurations when persisting Codable values to Keychain.
     ///
     /// ```swift
-    /// withDepCanendencies {
+    /// withDependencies {
     ///     $0.defaultKeychainJSONEncoder = {
     ///         let encoder = JSONEncoder()
     ///         encoder.dateEncodingStrategy = .iso8601
@@ -50,11 +61,10 @@ extension DependencyValues {
     ///     // Encodes values with custom configuration
     /// }
     /// ```
-    @DependencyEntry(
-        liveValue: JSONEncoder(),
-        previewValue: JSONEncoder()
-    )
-    public var defaultKeychainJSONEncoder: JSONEncoder
+    public var defaultKeychainJSONEncoder: JSONEncoder {
+        get { self[DefaultKeychainJSONEncoderKey.self] }
+        set { self[DefaultKeychainJSONEncoderKey.self] = newValue }
+    }
 }
 
 /// A client interface for low-level Keychain data storage and retrieval.
@@ -64,7 +74,7 @@ extension DependencyValues {
 ///
 /// ### Overview
 /// `KeychainStorage` abstracts reading and writing raw `Data` to and from the Keychain. In production (`liveValue`),
-/// it delegates to `KeychainSwift`. In previews and tests (`previewValue`), it uses an in-memory thread-safe `Mutex` dictionary,
+/// it delegates to `KeychainSwift`. In previews and tests (`previewValue`), it uses an in-memory thread-safe `LockIsolated` dictionary,
 /// avoiding side effects to the actual device Keychain.
 ///
 /// ### Usage
@@ -86,6 +96,9 @@ extension DependencyValues {
 /// ```
 @DependencyClient
 public struct KeychainStorage: Sendable {
+    /// Unique identifier distinguishing storage instances.
+    public var storageID: UUID = UUID()
+    
     /// Retrieves raw data from the Keychain for a given key.
     ///
     /// - Parameter key: The unique identifier key in the Keychain.
@@ -98,6 +111,11 @@ public struct KeychainStorage: Sendable {
     ///   - data: The `Data` to persist.
     ///   - forKey: The unique identifier key in the Keychain.
     public var set: @Sendable (_ data: Data, _ forKey: String) -> Void
+    
+    /// Deletes the data from the Keychain for a given key.
+    ///
+    /// - Parameter key: The unique identifier key to delete.
+    public var delete: @Sendable (_ key: String) -> Void = { _ in }
 }
 
 private enum KeychainStorageLocals {
@@ -108,26 +126,72 @@ extension KeychainStorage: DependencyKey {
     /// The live implementation of `KeychainStorage` backed by `KeychainSwift`.
     public static var liveValue: KeychainStorage {
         let keychain = KeychainSwift()
-        return .init { key in
-            return keychain.getData(key)
-        } set: { data, key in
-            guard !KeychainStorageLocals.isSetting else { return }
-            KeychainStorageLocals.$isSetting.withValue(true) {
-                keychain.set(data, forKey: key)
+        let id = UUID()
+        return .init(
+            storageID: id,
+            getData: { key in
+                keychain.getData(key)
+            }, set: { data, key in
+                guard !KeychainStorageLocals.isSetting else { return }
+                KeychainStorageLocals.$isSetting.withValue(true) {
+                    keychain.set(data, forKey: key)
+                    NotificationCenter.default.post(
+                        name: .keychainDidChange,
+                        object: id,
+                        userInfo: ["key": key]
+                    )
+                }
+            }, delete: { key in
+                guard !KeychainStorageLocals.isSetting else { return }
+                KeychainStorageLocals.$isSetting.withValue(true) {
+                    keychain.delete(key)
+                    NotificationCenter.default.post(
+                        name: .keychainDidChange,
+                        object: id,
+                        userInfo: ["key": key]
+                    )
+                }
             }
-        }
+        )
     }
     
     /// The preview implementation of `KeychainStorage` backed by an in-memory dictionary.
     ///
     /// Useful for Xcode Previews and unit tests, avoiding touching the system Keychain.
     public static var previewValue: KeychainStorage {
-        let storage = Mutex<Dictionary<String, Data>>([:])
-        return .init { key in
-            storage.withLock { $0[key] }
-        } set: { data, key in
-            storage.withLock { $0[key] = data }
-        }
+        .inMemory()
+    }
+    
+    /// The test implementation of `KeychainStorage` backed by an in-memory dictionary.
+    public static var testValue: KeychainStorage {
+        .previewValue
+    }
+    
+    /// Creates an in-memory `KeychainStorage` backed by a thread-safe isolated dictionary.
+    public static func inMemory(
+        _ storage: LockIsolated<[String: Data]> = LockIsolated([:]),
+        id: UUID = UUID()
+    ) -> KeychainStorage {
+        .init(
+            storageID: id,
+            getData: { key in
+                storage.value[key]
+            }, set: { data, key in
+                storage.withValue { $0[key] = data }
+                NotificationCenter.default.post(
+                    name: .keychainDidChange,
+                    object: id,
+                    userInfo: ["key": key]
+                )
+            }, delete: { key in
+                storage.withValue { _ = $0.removeValue(forKey: key) }
+                NotificationCenter.default.post(
+                    name: .keychainDidChange,
+                    object: id,
+                    userInfo: ["key": key]
+                )
+            }
+        )
     }
 }
 
@@ -167,13 +231,27 @@ extension KeychainStorage {
     /// This method uses the `defaultKeychainJSONEncoder` dependency to encode the value before storing.
     ///
     /// - Parameters:
-    ///   - value: The value to persist in the Keychain.
+    ///   - value: The value to persist in Keychain.
     ///   - key: The key under which the value should be stored.
     /// - Throws: An error if encoding fails.
-    public func setValue<Value: Encodable>(_ value: Value, for key: String) throws {
-        @Dependency(\.defaultKeychainJSONEncoder) var encoder
-        let data = try encoder.encode(value)
+    public func setValue<Value: Encodable>(_ value: Value?, for key: String) throws {
         @Dependency(\.defaultKeychainStorage) var keychain
-        keychain.set(data: data, forKey: key)
+        if let value {
+            @Dependency(\.defaultKeychainJSONEncoder) var encoder
+            let data = try encoder.encode(value)
+            keychain.set(data: data, forKey: key)
+            NotificationCenter.default.post(
+                name: .keychainDidChange,
+                object: keychain.storageID,
+                userInfo: ["key": key]
+            )
+        } else {
+            keychain.delete(key: key)
+            NotificationCenter.default.post(
+                name: .keychainDidChange,
+                object: keychain.storageID,
+                userInfo: ["key": key]
+            )
+        }
     }
 }
