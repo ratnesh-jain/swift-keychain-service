@@ -14,6 +14,7 @@ Persist sensitive credentials, authentication tokens, and `Codable` models secur
 - **Codable & Type-Safe**: Read, write, and delete any `Codable & Sendable` value directly to and from Keychain.
 - **Deletion & Nil-Handling**: Setting optional values to `nil` or calling `keychain.delete(...)` automatically removes entries from Keychain and notifies observers.
 - **Preview & Test-Safe**: Automatic in-memory thread-safe fallback (`LockIsolated`-backed) for SwiftUI previews and unit tests—never pollutes or fails against the host Keychain in non-host environments.
+- **Customizable Serialization**: Override `defaultKeychainJSONDecoder` and `defaultKeychainJSONEncoder` (powered by `@DependencyEntry`) to handle custom date formats, key formatting strategies, and more.
 - **Per-Key Customization**: Pass custom `KeychainStorage`, `JSONDecoder`, or `JSONEncoder` directly to `.keychain(...)` or override global defaults via dependencies.
 - **Lifecycle & Targeted Change Observation**: Automatically synchronizes when the application enters the foreground or when `.keychainDidChange` notifications are broadcast (targeted by storage ID and key).
 
@@ -155,7 +156,7 @@ try keychain.setValue(nil as UserSession?, for: "session_info")
 
 ### 4. Customizing JSON Encoders / Decoders
 
-You can configure global date encoding/decoding strategies and formatting by overriding dependencies:
+`defaultKeychainJSONDecoder` and `defaultKeychainJSONEncoder` use the `@DependencyEntry` macro from `swift-dependencies` to provide default `JSONDecoder` and `JSONEncoder` instances. You can configure custom date encoding/decoding strategies and formatting by overriding them:
 
 ```swift
 withDependencies {

@@ -13,7 +13,11 @@ import Foundation
 @testable import KeychainService
 import Testing
 
-@Suite struct KeychainStorageTests {
+@Suite(.dependencies {
+    $0.defaultKeychainJSONDecoder = JSONDecoder()
+    $0.defaultKeychainJSONEncoder = JSONEncoder()
+})
+struct KeychainStorageTests {
     @Test func inMemoryStorageReadWrite() {
         let storage = LockIsolated<[String: Data]>([:])
         let keychainStorage = KeychainStorage.inMemory(storage)

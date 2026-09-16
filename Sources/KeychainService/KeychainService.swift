@@ -11,18 +11,6 @@ import DependenciesMacros
 import Foundation
 @preconcurrency import KeychainSwift
 
-private enum DefaultKeychainJSONDecoderKey: DependencyKey {
-    static var liveValue: JSONDecoder { JSONDecoder() }
-    static var previewValue: JSONDecoder { JSONDecoder() }
-    static var testValue: JSONDecoder { JSONDecoder() }
-}
-
-private enum DefaultKeychainJSONEncoderKey: DependencyKey {
-    static var liveValue: JSONEncoder { JSONEncoder() }
-    static var previewValue: JSONEncoder { JSONEncoder() }
-    static var testValue: JSONEncoder { JSONEncoder() }
-}
-
 extension DependencyValues {
     /// The default JSON decoder used for decoding Keychain values.
     ///
@@ -38,10 +26,8 @@ extension DependencyValues {
     ///     // Decodes values with custom configuration
     /// }
     /// ```
-    public var defaultKeychainJSONDecoder: JSONDecoder {
-        get { self[DefaultKeychainJSONDecoderKey.self] }
-        set { self[DefaultKeychainJSONDecoderKey.self] = newValue }
-    }
+    @DependencyEntry(liveValue: JSONDecoder(), previewValue: JSONDecoder())
+    public var defaultKeychainJSONDecoder: JSONDecoder
     
     /// The default JSON encoder used for encoding Keychain values.
     ///
@@ -57,10 +43,8 @@ extension DependencyValues {
     ///     // Encodes values with custom configuration
     /// }
     /// ```
-    public var defaultKeychainJSONEncoder: JSONEncoder {
-        get { self[DefaultKeychainJSONEncoderKey.self] }
-        set { self[DefaultKeychainJSONEncoderKey.self] = newValue }
-    }
+    @DependencyEntry(liveValue: JSONEncoder(), previewValue: JSONEncoder())
+    public var defaultKeychainJSONEncoder: JSONEncoder
 }
 
 /// A client interface for low-level Keychain data storage and retrieval.

@@ -33,7 +33,11 @@ struct TestSession: Codable, Equatable, Sendable {
     var isActive: Bool
 }
 
-@Suite struct KeychainKeyTests {
+@Suite(.dependencies {
+    $0.defaultKeychainJSONDecoder = JSONDecoder()
+    $0.defaultKeychainJSONEncoder = JSONEncoder()
+})
+struct KeychainKeyTests {
     @Test(.dependencies {
         $0.defaultKeychainStorage = .inMemory(
             LockIsolated<[String: Data]>([
