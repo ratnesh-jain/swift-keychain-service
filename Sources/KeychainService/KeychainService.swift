@@ -31,11 +31,9 @@ extension DependencyValues {
     ///
     /// ```swift
     /// withDependencies {
-    ///     $0.defaultKeychainJSONDecoder = {
-    ///         let decoder = JSONDecoder()
-    ///         decoder.dateDecodingStrategy = .iso8601
-    ///         return decoder
-    ///     }()
+    ///     let decoder = JSONDecoder()
+    ///     decoder.dateDecodingStrategy = .iso8601
+    ///     $0.defaultKeychainJSONDecoder = decoder
     /// } operation: {
     ///     // Decodes values with custom configuration
     /// }
@@ -52,11 +50,9 @@ extension DependencyValues {
     ///
     /// ```swift
     /// withDependencies {
-    ///     $0.defaultKeychainJSONEncoder = {
-    ///         let encoder = JSONEncoder()
-    ///         encoder.dateEncodingStrategy = .iso8601
-    ///         return encoder
-    ///     }()
+    ///     let encoder = JSONEncoder()
+    ///     encoder.dateEncodingStrategy = .iso8601
+    ///     $0.defaultKeychainJSONEncoder = encoder
     /// } operation: {
     ///     // Encodes values with custom configuration
     /// }
@@ -90,9 +86,15 @@ extension DependencyValues {
 ///     // Process data
 /// }
 ///
+/// // Deleting raw data
+/// keychain.delete("authToken")
+///
 /// // Storing and retrieving Codable values
 /// try keychain.setValue(userSession, for: "session")
 /// let session: UserSession? = try keychain.value(for: "session")
+///
+/// // Deleting Codable values by passing nil
+/// try keychain.setValue(nil as UserSession?, for: "session")
 /// ```
 @DependencyClient
 public struct KeychainStorage: Sendable {
